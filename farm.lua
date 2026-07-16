@@ -673,32 +673,6 @@ local apCorner = Instance.new("UICorner")
 apCorner.CornerRadius = UDim.new(0, 8)
 apCorner.Parent = applyBtn
 
--- Infinite Gold
-local goldBtn = Instance.new("TextButton")
-goldBtn.Parent = playerPanel
-goldBtn.Size = UDim2.new(0, 150, 0, 35)
-goldBtn.Position = UDim2.new(0.55, 0, 0.5, 0)
-goldBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 130)
-goldBtn.Text = "Infinite Gold"
-goldBtn.TextColor3 = Color3.fromRGB(255,255,255)
-goldBtn.TextSize = 18
-goldBtn.Font = Enum.Font.Gotham
-local gCorner = Instance.new("UICorner")
-gCorner.CornerRadius = UDim.new(0, 8)
-gCorner.Parent = goldBtn
-local gStroke = Instance.new("UIStroke")
-gStroke.Color = Color3.fromRGB(255, 215, 0)
-gStroke.Thickness = 1.5
-gStroke.Parent = goldBtn
-
-local GoldIndicator = Instance.new("ImageLabel")
-GoldIndicator.Parent = goldBtn
-GoldIndicator.Size = UDim2.new(0, 22, 0, 22)
-GoldIndicator.Position = UDim2.new(1, -28, 0.5, -11)
-GoldIndicator.BackgroundTransparency = 1
-GoldIndicator.Image = "rbxassetid://5552526748"
-GoldIndicator.ImageColor3 = Color3.fromRGB(255,0,0)
-
 -- NoClip toggle
 local noclipBtn = Instance.new("TextButton")
 noclipBtn.Parent = playerPanel
@@ -725,31 +699,6 @@ NoclipIndicator.BackgroundTransparency = 1
 NoclipIndicator.Image = "rbxassetid://5552526748"
 NoclipIndicator.ImageColor3 = Color3.fromRGB(255,0,0)
 
--- Infinite Tools
-local toolsBtn = Instance.new("TextButton")
-toolsBtn.Parent = playerPanel
-toolsBtn.Size = UDim2.new(0, 150, 0, 35)
-toolsBtn.Position = UDim2.new(0.1, 0, 0.15, 0)
-toolsBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 130)
-toolsBtn.Text = "Inf Tools"
-toolsBtn.TextColor3 = Color3.fromRGB(255,255,255)
-toolsBtn.TextSize = 18
-toolsBtn.Font = Enum.Font.Gotham
-local tCorner = Instance.new("UICorner")
-tCorner.CornerRadius = UDim.new(0, 8)
-tCorner.Parent = toolsBtn
-local tStroke = Instance.new("UIStroke")
-tStroke.Color = Color3.fromRGB(160, 160, 255)
-tStroke.Thickness = 1.5
-tStroke.Parent = toolsBtn
-
-local ToolsIndicator = Instance.new("ImageLabel")
-ToolsIndicator.Parent = toolsBtn
-ToolsIndicator.Size = UDim2.new(0, 22, 0, 22)
-ToolsIndicator.Position = UDim2.new(1, -28, 0.5, -11)
-ToolsIndicator.BackgroundTransparency = 1
-ToolsIndicator.Image = "rbxassetid://5552526748"
-ToolsIndicator.ImageColor3 = Color3.fromRGB(255,0,0)
 
 -- === Misc Tab ===
 local miscPanel = createTab("Misc", 2)
@@ -759,7 +708,7 @@ miscLabel.Parent = miscPanel
 miscLabel.Size = UDim2.new(1, -20, 0, 30)
 miscLabel.Position = UDim2.new(0, 10, 0.05, 0)
 miscLabel.BackgroundTransparency = 1
-miscLabel.Text = "Hotkeys: F1-Farm, F2-AFK, F3-Gold, F4-Noclip, F5-Collect, F6-Fly, F7-Build"
+miscLabel.Text = "credits: made by kiten, tirvox"
 miscLabel.TextColor3 = Color3.fromRGB(150,150,200)
 miscLabel.TextSize = 16
 miscLabel.Font = Enum.Font.Gotham
