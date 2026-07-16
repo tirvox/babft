@@ -677,7 +677,7 @@ apCorner.Parent = applyBtn
 local noclipBtn = Instance.new("TextButton")
 noclipBtn.Parent = playerPanel
 noclipBtn.Size = UDim2.new(0, 150, 0, 35)
-noclipBtn.Position = UDim2.new(0.55, 0, 0.15, 0)
+noclipBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
 noclipBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 130)
 noclipBtn.Text = "NoClip"
 noclipBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -712,16 +712,6 @@ miscLabel.Text = "credits: made by kiten, tirvox"
 miscLabel.TextColor3 = Color3.fromRGB(150,150,200)
 miscLabel.TextSize = 16
 miscLabel.Font = Enum.Font.Gotham
-
-local hotkeyInfo = Instance.new("TextLabel")
-hotkeyInfo.Parent = miscPanel
-hotkeyInfo.Size = UDim2.new(1, -20, 0, 20)
-hotkeyInfo.Position = UDim2.new(0, 10, 0.2, 0)
-hotkeyInfo.BackgroundTransparency = 1
-hotkeyInfo.Text = "credits: made by kiten, tirvox"
-hotkeyInfo.TextColor3 = Color3.fromRGB(200,200,255)
-hotkeyInfo.TextSize = 14
-hotkeyInfo.Font = Enum.Font.Gotham
 
 -- === Points Tab ===
 local pointsPanel = createTab("Points", 3)
