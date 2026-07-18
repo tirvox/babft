@@ -1,7 +1,6 @@
--- Ultimate Farm Script v7.0 – Two farm modes (TP & Tween), Auto-collect, Anti-AFK,
--- Save points, GodMode (no damage), Fly (WASD), Auto-build.
--- Player tab: only Speed, Jump, Gravity and Apply button.
--- Run in a Roblox executor.
+-- Ultimate Farm Script v7.6 – удалена вкладка Shop (автопокупка убрана). Оставлены: Farm, Player, Points, Misc.
+-- Сохранены: кнопка полного закрытия скрипта в Misc, скрытие GUI по RSHIFT.
+-- Все остальные функции (фарм, анти-афк, авто-сбор, полёт, бог-режим, сохранение точек) без изменений.
 
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
@@ -290,8 +289,8 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Parent = screenGui
-MainFrame.Size = UDim2.new(0, 450, 0, 350)
-MainFrame.Position = UDim2.new(0.5, -225, 0.5, -175)
+MainFrame.Size = UDim2.new(0, 550, 0, 350)  -- размер чуть меньше без вкладки Shop
+MainFrame.Position = UDim2.new(0.5, -275, 0.5, -175)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 MainFrame.BackgroundTransparency = 0.1
@@ -333,7 +332,7 @@ TitleLabel.Parent = TitleBar
 TitleLabel.Size = UDim2.new(1, -40, 1, 0)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Ultimate Farm v7.0"
+TitleLabel.Text = "Ultimate Farm v7.6"
 TitleLabel.TextColor3 = Color3.fromRGB(230, 230, 255)
 TitleLabel.TextScaled = true
 TitleLabel.Font = Enum.Font.GothamBold
@@ -365,7 +364,7 @@ TabContainer.Parent = Content
 TabContainer.Size = UDim2.new(1, 0, 0, 30)
 TabContainer.BackgroundTransparency = 1
 
-local tabs = {"Farm", "Player", "Misc", "Points"}
+local tabs = {"Farm", "Player", "Points", "Misc"}  -- Shop удалена
 local tabButtons = {}
 local panels = {}
 
@@ -503,7 +502,7 @@ CollectIndicator.BackgroundTransparency = 1
 CollectIndicator.Image = "rbxassetid://5552526748"
 CollectIndicator.ImageColor3 = Color3.fromRGB(255,0,0)
 
--- === Player Tab (только Speed, Jump, Gravity, Apply) ===
+-- === Player Tab ===
 local playerPanel = createTab("Player", 1)
 
 local speedLabel = Instance.new("TextLabel")
@@ -588,20 +587,8 @@ local apCorner = Instance.new("UICorner")
 apCorner.CornerRadius = UDim.new(0, 8)
 apCorner.Parent = applyBtn
 
--- === Misc Tab ===
-local miscPanel = createTab("Misc", 2)
-local miscLabel = Instance.new("TextLabel")
-miscLabel.Parent = miscPanel
-miscLabel.Size = UDim2.new(1, -20, 0, 30)
-miscLabel.Position = UDim2.new(0, 10, 0.05, 0)
-miscLabel.BackgroundTransparency = 1
-miscLabel.Text = "credits: made by kiten, tirvox"
-miscLabel.TextColor3 = Color3.fromRGB(150,150,200)
-miscLabel.TextSize = 16
-miscLabel.Font = Enum.Font.Gotham
-
 -- === Points Tab ===
-local pointsPanel = createTab("Points", 3)
+local pointsPanel = createTab("Points", 2)
 
 local saveBtn = Instance.new("TextButton")
 saveBtn.Parent = pointsPanel
@@ -682,6 +669,44 @@ tpToPointBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- === Misc Tab (кнопка закрытия) ===
+local miscPanel = createTab("Misc", 3)
+
+local miscLabel = Instance.new("TextLabel")
+miscLabel.Parent = miscPanel
+miscLabel.Size = UDim2.new(1, -20, 0, 30)
+miscLabel.Position = UDim2.new(0, 10, 0.05, 0)
+miscLabel.BackgroundTransparency = 1
+miscLabel.Text = "credits: made by kiten, tirvox"
+miscLabel.TextColor3 = Color3.fromRGB(150,150,200)
+miscLabel.TextSize = 16
+miscLabel.Font = Enum.Font.Gotham
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Parent = miscPanel
+closeBtn.Size = UDim2.new(0, 160, 0, 35)
+closeBtn.Position = UDim2.new(0.1, 0, 0.3, 0)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeBtn.Text = "Close Script"
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.TextSize = 18
+closeBtn.Font = Enum.Font.Gotham
+local clCorner = Instance.new("UICorner")
+clCorner.CornerRadius = UDim.new(0, 8)
+clCorner.Parent = closeBtn
+closeBtn.MouseButton1Click:Connect(function()
+    autoFarmEnabled = false
+    antiAfkEnabled = false
+    autoCollectEnabled = false
+    flyEnabled = false
+    if farmTask then coroutine.close(farmTask); farmTask = nil end
+    if collectionTask then coroutine.close(collectionTask); collectionTask = nil end
+    if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
+    workspace.Gravity = gravityNormal
+    screenGui:Destroy()
+    print("[+] Script closed.")
+end)
+
 -- === TAB SWITCHING ===
 for i, name in ipairs(tabs) do
     tabButtons[name].MouseButton1Click:Connect(function()
@@ -725,7 +750,7 @@ MinButton.MouseButton1Click:Connect(function()
     minimized = not minimized
     Content.Visible = not minimized
     MinButton.Text = minimized and "+" or "−"
-    MainFrame.Size = minimized and UDim2.new(0, 450, 0, 35) or UDim2.new(0, 450, 0, 350)
+    MainFrame.Size = minimized and UDim2.new(0, 550, 0, 35) or UDim2.new(0, 550, 0, 350)
 end)
 
 -- === BUTTON LOGIC ===
@@ -760,7 +785,7 @@ CollectBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- === ИСПРАВЛЕННАЯ КНОПКА APPLY ===
+-- === APPLY ===
 applyBtn.MouseButton1Click:Connect(function()
     local speed = tonumber(speedSlider.Text) or 16
     local jump = tonumber(jumpSlider.Text) or 50
@@ -776,13 +801,15 @@ applyBtn.MouseButton1Click:Connect(function()
     gravLabel.Text = "Gravity: " .. grav
 end)
 
--- === HOTKEYS (только F1 – Farm, F2 – Anti-AFK) ===
+-- === HOTKEYS ===
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.F1 then
         FarmBtn.MouseButton1Click:Fire()
     elseif input.KeyCode == Enum.KeyCode.F2 then
         AntiAfkBtn.MouseButton1Click:Fire()
+    elseif input.KeyCode == Enum.KeyCode.RightShift then
+        MainFrame.Visible = not MainFrame.Visible
     end
 end)
 
@@ -821,4 +848,4 @@ RunService.Heartbeat:Connect(function()
     setGodMode(true)
 end)
 
-print("[+] Ultimate Farm v7.0 loaded (Apply fixed, only Speed/Jump/Gravity in Player tab).")
+print("[+] Ultimate Farm v7.6 loaded (вкладка Shop удалена, остальное без изменений).")
