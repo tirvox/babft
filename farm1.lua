@@ -4,7 +4,7 @@ local secret_key = "zhjkbn"
 
 -- Сюда вставляй зашифрованные строки
 local encrypted_default = "35.6.8.e.b.z.l.y.c.f.g.2a.16.n.m.u.2x.1k.x.1c.1b.1u.u.1e.2z.2x.t.1n.1f.1o.14.36.2u.2u.1f.1f.1e.30.1g.16.1r.1c.1m.1i.24.1y.1i.24.22.1l.1j.2b.1o.1i.1x.3i.1u.1q.22.3h.23.1r.2f.2l.26.2g.48.26.28.27.23.2q.4e.2c.29.28.25.3z.2u.2h.2c.2f.4g.2k.34.34.2m.34.2i.3a.32.38.3f.4j.31.3f.3g.4x.4m.4m.4v.4t.5z" 
-local encrypted_linoria = "35.6.8.e.b.z.l.y.c.f.g.2a.16.n.m.u.2x.1k.x.1c.1b.1u.u.1e.2z.2x.t.1n.1f.1o.14.36.2u.2u.1f.1f.1e.30.1g.16.1r.1c.1m.1i.24.1y.1i.24.22.1l.1j.2b.1o.1i.1x.3i.1u.1q.22.3h.23.1r.2f.2l.26.2g.48.26.28.27.23.2q.4e.2s.2i.2h.2m.3z.2p.2l.2k.2p.2s.45.30.2n.2i.2l.4m.2q.3a.3a.2s.2t.2y.2o.3a.3g.2u.32.4x.2w.3a.35.52.4s.52.4y.5c.5s"
+local encrypted_linoria = "35.6.8.e.b.z.l.y.c.f.g.2a.16.n.m.u.2x.1k.x.1c.1b.1u.u.1e.2z.2x.t.1n.1f.1o.14.36.2u.2u.1f.1f.1e.30.1g.16.1r.1c.1m.1i.24.1y.1i.24.22.1l.1j.2b.1o.1i.1x.3i.1u.1q.22.3h.23.1r.2f.2l.26.2g.48.26.28.27.23.2q.4e.2c.29.28.25.3z.2u.2h.2c.2f.4g.2k.34.34.2m.2n.2s.2i.34.3a.2o.2w.4r.2q.34.2z.4w.4m.4w.4s.56.5m"
 
 local function decrypt(data, key)
     local decrypted = ""
