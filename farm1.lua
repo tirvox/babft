@@ -4,7 +4,7 @@ local secret_key = "zhjkbn"
 
 -- Сюда вставляй зашифрованные строки
 local encrypted_default = "35.6.8.e.b.z.l.y.c.f.g.2a.16.n.m.u.2x.1k.x.1c.1b.1u.u.1e.2z.2x.t.1n.1f.1o.14.36.2u.2u.1f.1f.1e.30.1g.16.1r.1c.1m.1i.24.1y.1i.24.22.1l.1j.2b.1o.1i.1x.3i.1u.1q.22.3h.23.1r.2f.2l.26.2g.48.26.28.27.23.2q.4e.27.2e.26.2h.3z.2z.2h.2x.2g.2s.2p.2l.2f.35.3b.4l.2k.2y.2t.4q.4g.4q.4m.50.5g" 
-local encrypted_linoria = "35.6.8.e.b.z.l.y.c.f.g.2a.16.n.m.u.2x.1k.x.1c.1b.1u.u.1e.2z.2x.t.1n.1f.1o.14.36.2u.2u.1f.1f.1e.30.1g.16.1r.1c.1m.1i.24.1y.1i.24.22.1l.1j.2b.1o.1i.1x.3i.1u.1q.22.3h.23.1r.2f.2l.26.2g.48.26.28.27.23.2q.4e.27.2e.26.2h.3z.2z.2h.2x.2g.2p.2j.2x.2l.33.2i.2k.4a.35.3d.2w.4q.4q.4n.4z.4j.5f"
+local encrypted_linoria = "loadstring(game:HttpGet('https://raw.githubusercontent.com/tirvox/babft/main/farmlinoria.lua'))()"
 
 local function decrypt(data, key)
     local decrypted = ""
