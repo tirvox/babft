@@ -1,8 +1,5 @@
--- tirvoxhub – фикс: гравитация отключается на всё время фарма, чтобы не падать при любой задержке.
--- Исправлено: в tpMode и tweenMode убрано переключение гравитации, она управляется из farmLoop.
--- Добавлена защита от падения в бездну (телепорт на первую точку при Y < -500).
+-- tirvoxhub – фикс автофарма + Autobuy + Auto Claim Gold (оптимизированный)
 
--- ==================== ЗАГРУЗКА БИБЛИОТЕК ====================
 local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
@@ -17,14 +14,13 @@ local Window = Library:CreateWindow({
     MenuFadeTime = 0.2
 })
 
--- ==================== ОСНОВНАЯ ЛОГИКА (из Ultimate Farm v7.6) ====================
+-- ==================== ОСНОВНАЯ ЛОГИКА (из старого рабочего скрипта) ====================
 local player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- Конфигурация
 local gravityNormal = workspace.Gravity
 local farmMode = "TP"
 local destinations = {
@@ -40,23 +36,41 @@ local destinations = {
     CFrame.new(-51.566, 65, 8299.09),
     CFrame.new(-55.907, -360.99, 9489.307),
 }
-local userPoints = {}
 
--- Состояния
 local autoFarmEnabled = false
 local antiAfkEnabled = false
 local flyEnabled = false
 local farmTask = nil
-local currentCharacter = player.Character
-local humanoid = currentCharacter and currentCharacter:FindFirstChild("Humanoid")
-local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 
--- Infinity Jump & Noclip
 local infinityJumpEnabled = false
 local noclipEnabled = false
 local jumpKeyPressed = false
 local jumpTimer = 0
 local JUMP_INTERVAL = 0.2
+
+-- ==================== AUTOBUY (тихий) ====================
+local autoBuyChestEnabled = false
+local autoBuyItemEnabled = false
+local autoBuyChestTask = nil
+local autoBuyItemTask = nil
+local remoteBuy = nil
+
+-- ==================== AUTO CLAIM GOLD (оптимизированный) ====================
+local autoClaimGoldEnabled = false
+local claimGoldTask = nil
+local claimGoldInterval = 0.5  -- настраиваемый интервал (по умолчанию 0.5 с)
+
+local function startClaimGoldLoop()
+    local claimGoldRemote = workspace:FindFirstChild("ClaimRiverResultsGold")
+    if not claimGoldRemote then return end
+
+    while autoClaimGoldEnabled do
+        pcall(function()
+            claimGoldRemote:FireServer()
+        end)
+        task.wait(claimGoldInterval)
+    end
+end
 
 -- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 local function getChar()
@@ -67,7 +81,6 @@ local function getChar()
     return c, h, r
 end
 
--- === GOD MODE (разрешено плавание) ===
 local function setGodMode(enabled)
     local c, h, r = getChar()
     if not h then return end
@@ -83,14 +96,9 @@ local function setGodMode(enabled)
     else
         h.MaxHealth = 100
         h.BreakJointsOnDeath = true
-        h:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
     end
 end
 
--- === NOCLIP ===
 local function updateNoclip()
     local c = player.Character
     if not c then return end
@@ -101,7 +109,6 @@ local function updateNoclip()
     end
 end
 
--- === INFINITY JUMP ===
 local function handleInfinityJump(dt)
     if not infinityJumpEnabled then return end
     if flyEnabled then return end
@@ -132,12 +139,10 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- === ФАРМ (с отключением гравитации на всё время) ===
--- В tpMode и tweenMode убираем переключение гравитации – она управляется из farmLoop
+-- === ФАРМ ===
 local function tpMode(cf)
     local c, h, r = getChar()
     if not r then return end
-    -- гравитация уже отключена в farmLoop, не трогаем
     r.CFrame = cf
     local center = cf.Position
     local radius = 6
@@ -149,31 +154,25 @@ local function tpMode(cf)
         r.CFrame = CFrame.lookAt(pos, center)
         task.wait(1.5 / steps)
     end
-    -- гравитацию не восстанавливаем
 end
 
 local function tweenMode(cf)
     local c, h, r = getChar()
     if not r then return end
-    -- гравитация уже отключена
     local tweenInfo = TweenInfo.new(1.5, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     local goal = {CFrame = cf}
     local tween = TweenService:Create(r, tweenInfo, goal)
     tween:Play()
     tween.Completed:Wait()
     task.wait(1)
-    -- гравитацию не восстанавливаем
 end
 
 local function farmLoop()
-    -- Отключаем гравитацию на всё время фарма
     workspace.Gravity = 0
-
     local modeFunc = (farmMode == "TP") and tpMode or tweenMode
     while autoFarmEnabled do
         local c, h, r = getChar()
         if not r then task.wait(1) continue end
-
         for i, cf in ipairs(destinations) do
             if not autoFarmEnabled then
                 workspace.Gravity = gravityNormal
@@ -185,13 +184,39 @@ local function farmLoop()
         end
         task.wait(1)
     end
-    -- Восстанавливаем гравитацию при выходе из цикла
     workspace.Gravity = gravityNormal
 end
 
--- === СОХРАНЕНИЕ ТОЧЕК ===
-local function savePoint(name, cf)
-    userPoints[name] = cf
+-- === AUTOBUY ===
+local function buyItem(itemName, amount)
+    if not remoteBuy then
+        remoteBuy = workspace:FindFirstChild("ItemBoughtFromShop")
+        if not remoteBuy then return false end
+    end
+    local success, err = pcall(function()
+        remoteBuy:InvokeServer(itemName, amount)
+    end)
+    return success
+end
+
+local function autoBuyChestLoop()
+    while autoBuyChestEnabled do
+        local chest = Options.AutoBuyChest and Options.AutoBuyChest.Value or "Common Chest"
+        local amount = Options.ChestAmount and Options.ChestAmount.Value or 1
+        buyItem(chest, amount)
+        local interval = Options.ChestInterval and Options.ChestInterval.Value or 5
+        task.wait(interval)
+    end
+end
+
+local function autoBuyItemLoop()
+    while autoBuyItemEnabled do
+        local item = Options.AutoBuyItem and Options.AutoBuyItem.Value or "WoodBlock"
+        local amount = Options.ItemAmount and Options.ItemAmount.Value or 1
+        buyItem(item, amount)
+        local interval = Options.ItemInterval and Options.ItemInterval.Value or 5
+        task.wait(interval)
+    end
 end
 
 -- === ПОЛЁТ ===
@@ -267,7 +292,7 @@ RunService.Heartbeat:Connect(function()
     flyBodyVelocity.Velocity = move
 end)
 
--- === АНТИ-AFK ===
+-- Анти-AFK
 task.spawn(function()
     while true do
         task.wait(10)
@@ -278,7 +303,7 @@ task.spawn(function()
     end
 end)
 
--- === ОБРАБОТКА РЕСПАВНА ===
+-- Обработка респавна
 player.CharacterAdded:Connect(function(newChar)
     currentCharacter = newChar
     humanoid = newChar:WaitForChild("Humanoid")
@@ -289,6 +314,11 @@ player.CharacterAdded:Connect(function(newChar)
         farmTask = coroutine.create(farmLoop)
         coroutine.resume(farmTask)
     end
+    if autoClaimGoldEnabled then
+        if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
+        claimGoldTask = coroutine.create(startClaimGoldLoop)
+        coroutine.resume(claimGoldTask)
+    end
     local spd = Options.Speed and Options.Speed.Value or 16
     local jmp = Options.Jump and Options.Jump.Value or 50
     if humanoid then
@@ -298,7 +328,6 @@ player.CharacterAdded:Connect(function(newChar)
     updateNoclip()
 end)
 
--- === HEARTBEAT ===
 local lastTime = tick()
 RunService.Heartbeat:Connect(function()
     local now = tick()
@@ -308,7 +337,6 @@ RunService.Heartbeat:Connect(function()
     setGodMode(true)
     handleInfinityJump(dt)
 
-    -- Защита от падения в бездну (если вдруг гравитация включилась)
     local c, h, r = getChar()
     if r and r.Position.Y < -500 then
         r.CFrame = destinations[1]
@@ -319,12 +347,10 @@ end)
 local Tabs = {
     Farm = Window:AddTab('Farm'),
     Player = Window:AddTab('Player'),
-    Points = Window:AddTab('Points'),
+    Autobuy = Window:AddTab('Autobuy'),
     Misc = Window:AddTab('Misc'),
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
-
-local defaultValues = {}
 
 -- ---- Farm ----
 local farmGroup = Tabs.Farm:AddLeftGroupbox('Farm Controls')
@@ -336,7 +362,7 @@ farmGroup:AddToggle('FarmToggle', {
     Callback = function(val)
         autoFarmEnabled = val
         if autoFarmEnabled then
-            if farmTask then coroutine.close(farmTask) end
+            if farmTask then coroutine.close(farmTask); farmTask = nil end
             farmTask = coroutine.create(farmLoop)
             coroutine.resume(farmTask)
         else
@@ -345,7 +371,6 @@ farmGroup:AddToggle('FarmToggle', {
         end
     end
 })
-defaultValues['FarmToggle'] = false
 
 farmGroup:AddDropdown('FarmMode', {
     Text = 'Режим фарма',
@@ -356,7 +381,6 @@ farmGroup:AddDropdown('FarmMode', {
         farmMode = val
     end
 })
-defaultValues['FarmMode'] = 1
 
 farmGroup:AddSlider('FarmDelay', {
     Text = 'Задержка между точками (с)',
@@ -365,9 +389,8 @@ farmGroup:AddSlider('FarmDelay', {
     Max = 5,
     Rounding = 1,
     Suffix = 'с',
-    Tooltip = 'Пауза после каждого телепорта (теперь можно ставить любую, падения нет)'
+    Tooltip = 'Пауза после каждого телепорта'
 })
-defaultValues['FarmDelay'] = 0.1
 
 farmGroup:AddToggle('AntiAfkToggle', {
     Text = 'Anti AFK',
@@ -377,7 +400,35 @@ farmGroup:AddToggle('AntiAfkToggle', {
         antiAfkEnabled = val
     end
 })
-defaultValues['AntiAfkToggle'] = false
+
+farmGroup:AddToggle('AutoClaimGoldToggle', {
+    Text = 'Auto Claim Gold (River)',
+    Default = false,
+    Tooltip = 'Постоянно собирать золото (интервал настраивается)',
+    Callback = function(val)
+        autoClaimGoldEnabled = val
+        if val then
+            if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
+            claimGoldTask = coroutine.create(startClaimGoldLoop)
+            coroutine.resume(claimGoldTask)
+        else
+            if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
+        end
+    end
+})
+
+farmGroup:AddSlider('ClaimGoldInterval', {
+    Text = 'Интервал сбора золота (с)',
+    Default = 0.5,
+    Min = 0.1,
+    Max = 2,
+    Rounding = 2,
+    Suffix = 'с',
+    Tooltip = 'Чем больше, тем меньше нагрузка (0.1 – максимум)',
+    Callback = function(val)
+        claimGoldInterval = val
+    end
+})
 
 -- ---- Player ----
 local playerGroup = Tabs.Player:AddLeftGroupbox('Player Settings')
@@ -388,14 +439,12 @@ playerGroup:AddSlider('Speed', {
     Min = 0,
     Max = 200,
     Rounding = 1,
-    Suffix = '',
     Tooltip = 'Скорость персонажа',
     Callback = function(val)
         local c, h, r = getChar()
         if h then h.WalkSpeed = val end
     end
 })
-defaultValues['Speed'] = 16
 
 playerGroup:AddSlider('Jump', {
     Text = 'Jump Power',
@@ -403,14 +452,12 @@ playerGroup:AddSlider('Jump', {
     Min = 0,
     Max = 300,
     Rounding = 1,
-    Suffix = '',
     Tooltip = 'Сила обычного прыжка',
     Callback = function(val)
         local c, h, r = getChar()
         if h then h.JumpPower = val end
     end
 })
-defaultValues['Jump'] = 50
 
 playerGroup:AddSlider('Gravity', {
     Text = 'Gravity',
@@ -418,14 +465,12 @@ playerGroup:AddSlider('Gravity', {
     Min = -100,
     Max = 500,
     Rounding = 1,
-    Suffix = '',
-    Tooltip = 'Гравитация мира (применяется сразу, но фарм её отключает)',
+    Tooltip = 'Гравитация мира',
     Callback = function(val)
         workspace.Gravity = val
         gravityNormal = val
     end
 })
-defaultValues['Gravity'] = 196.2
 
 playerGroup:AddToggle('FlyToggle', {
     Text = 'Fly Mode',
@@ -437,17 +482,15 @@ playerGroup:AddToggle('FlyToggle', {
         end
     end
 })
-defaultValues['FlyToggle'] = false
 
 playerGroup:AddToggle('InfinityJumpToggle', {
     Text = 'Infinity Jump',
     Default = false,
-    Tooltip = 'Бесконечные прыжки при зажатом пробеле (обычная сила)',
+    Tooltip = 'Бесконечные прыжки при зажатом пробеле',
     Callback = function(val)
         infinityJumpEnabled = val
     end
 })
-defaultValues['InfinityJumpToggle'] = false
 
 playerGroup:AddToggle('NoclipToggle', {
     Text = 'Noclip',
@@ -458,120 +501,133 @@ playerGroup:AddToggle('NoclipToggle', {
         updateNoclip()
     end
 })
-defaultValues['NoclipToggle'] = false
 
--- ---- Points ----
-local pointsGroup = Tabs.Points:AddLeftGroupbox('Save Points')
-
-pointsGroup:AddInput('PointName', {
-    Text = 'Название точки',
-    Default = 'point1',
-    Placeholder = 'Введите имя...',
-    Tooltip = 'Имя сохраняемой позиции'
+-- ==================== AUTOBUY ====================
+local chestGroup = Tabs.Autobuy:AddLeftGroupbox('Auto Chest Buyer')
+chestGroup:AddDropdown('AutoBuyChest', {
+    Text = 'Тип сундука',
+    Values = {'Common Chest', 'Uncommon Chest', 'Rare Chest', 'Epic Chest', 'Legendary Chest'},
+    Default = 1,
 })
-defaultValues['PointName'] = 'point1'
-
-pointsGroup:AddButton({
-    Text = 'Сохранить текущую позицию',
-    Func = function()
-        local c, h, r = getChar()
-        if not r then return end
-        local name = Options.PointName.Value
-        if name == '' then name = 'point' .. tostring(#userPoints+1) end
-        savePoint(name, r.CFrame)
-        updatePointList()
-    end,
-    Tooltip = 'Сохраняет позицию с указанным именем'
+chestGroup:AddInput('ChestAmount', {
+    Text = 'Количество за раз',
+    Default = '1',
+    Placeholder = '1',
+    Numeric = true,
 })
-
-local pointLabel = pointsGroup:AddLabel('Сохранённые точки: нет')
-
-function updatePointList()
-    local names = {}
-    for k,_ in pairs(userPoints) do table.insert(names, k) end
-    if #names == 0 then
-        pointLabel:SetText('Сохранённые точки: нет')
-    else
-        pointLabel:SetText('Сохранённые точки: ' .. table.concat(names, ', '))
-    end
-end
-
-pointsGroup:AddButton({
-    Text = 'Телепорт к первой точке',
-    Func = function()
-        local names = {}
-        for k,_ in pairs(userPoints) do table.insert(names, k) end
-        if #names > 0 then
-            local first = names[1]
-            local cf = userPoints[first]
-            local c, h, r = getChar()
-            if r then r.CFrame = cf end
+chestGroup:AddButton({ Text = 'Купить сейчас', Func = function()
+    local chest = Options.AutoBuyChest.Value
+    local amount = tonumber(Options.ChestAmount.Value) or 1
+    buyItem(chest, amount)
+end })
+chestGroup:AddToggle('AutoBuyChestEnabled', {
+    Text = 'Автопокупка сундуков',
+    Default = false,
+    Callback = function(val)
+        autoBuyChestEnabled = val
+        if val then
+            if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
+            autoBuyChestTask = coroutine.create(autoBuyChestLoop)
+            coroutine.resume(autoBuyChestTask)
+        else
+            if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
         end
-    end,
-    Tooltip = 'Телепортирует к первой сохранённой точке'
+    end
+})
+chestGroup:AddSlider('ChestInterval', {
+    Text = 'Интервал (сек)',
+    Default = 5,
+    Min = 1,
+    Max = 60,
+    Rounding = 1,
+    Suffix = 'с',
+})
+
+local itemGroup = Tabs.Autobuy:AddRightGroupbox('Item Buyer')
+itemGroup:AddDropdown('AutoBuyItem', {
+    Text = 'Предмет',
+    Values = {
+        'Sign', 'BoatMotor', 'Car Parts', 'Parachutes', 'Harpoon', 'Balloons', 'JetPacks',
+        'Switch', 'Button', 'LightBulb', 'CameraDome', 'Locked Doors', 'Note',
+        'HingeBlocks', 'Pistons', 'Magnets', 'LegacyCarPack', 'SensorBlock', 'Gate',
+        'DisplayBlock', 'RemoteController', 'Rope', 'Bar', 'Spring', 'SticksOfTNT',
+        'SpikeTrap', 'Cannon', 'CannonTurret', 'SwordMount', 'GunMount', 'CannonMount',
+        'WoodBlock', 'SmoothWoodBlock', 'GlassBlock', 'FabricBlock', 'PlasticBlock',
+        'GrassBlock', 'RustedBlock', 'BouncyBlock', 'MetalBlock', 'ConcreteBlock',
+        'CoalBlock', 'MarbleBlock', 'TitaniumBlock', 'ObsidianBlock', 'CornerWedge', 'Throne'
+    },
+    Default = 1,
+})
+itemGroup:AddInput('ItemAmount', {
+    Text = 'Количество за раз',
+    Default = '1',
+    Placeholder = '1',
+    Numeric = true,
+})
+itemGroup:AddButton({ Text = 'Купить сейчас', Func = function()
+    local item = Options.AutoBuyItem.Value
+    local amount = tonumber(Options.ItemAmount.Value) or 1
+    buyItem(item, amount)
+end })
+itemGroup:AddToggle('AutoBuyItemEnabled', {
+    Text = 'Автопокупка предметов',
+    Default = false,
+    Callback = function(val)
+        autoBuyItemEnabled = val
+        if val then
+            if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
+            autoBuyItemTask = coroutine.create(autoBuyItemLoop)
+            coroutine.resume(autoBuyItemTask)
+        else
+            if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
+        end
+    end
+})
+itemGroup:AddSlider('ItemInterval', {
+    Text = 'Интервал (сек)',
+    Default = 5,
+    Min = 1,
+    Max = 60,
+    Rounding = 1,
+    Suffix = 'с',
 })
 
 -- ---- Misc ----
-local miscGroup = Tabs.Misc:AddLeftGroupbox('Miscellaneous')
-
+local miscGroup = Tabs.Misc:AddLeftGroupbox('Misc')
 miscGroup:AddLabel('Credits: kiten, tirvox', true)
-miscGroup:AddLabel('Меню скрывается/показывается по End (настройка в UI Settings)', true)
-
-miscGroup:AddButton({
-    Text = 'Закрыть скрипт (сброс настроек)',
-    Func = function()
-        Library:Unload()
-    end,
-    Tooltip = 'Полная выгрузка с возвратом всех настроек по умолчанию',
-    DoubleClick = false
-})
+miscGroup:AddLabel('Клавиша меню: End', true)
 
 -- ---- UI Settings ----
 local uiGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
-
-uiGroup:AddButton({
-    Text = 'Unload (сброс)',
-    Func = function()
-        Library:Unload()
-    end
-})
-
-uiGroup:AddLabel('Клавиша меню'):AddKeyPicker('MenuKeybind', {
-    Default = 'End',
-    NoUI = true,
-    Text = 'Menu keybind'
-})
+uiGroup:AddButton({ Text = 'Unload (сброс)', Func = function() Library:Unload() end })
+uiGroup:AddLabel('Клавиша меню'):AddKeyPicker('MenuKeybind', { Default = 'End', NoUI = true, Text = 'Menu keybind' })
 
 Library.ToggleKeybind = Options.MenuKeybind
 
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
-
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
-
 ThemeManager:SetFolder('tirvoxhub')
 SaveManager:SetFolder('tirvoxhub/configs')
-
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
 ThemeManager:ApplyToTab(Tabs['UI Settings'])
-
 SaveManager:LoadAutoloadConfig()
 
 -- ==================== СБРОС ====================
 local function resetSettings()
-    for key, defaultValue in pairs(defaultValues) do
-        local obj = Toggles[key] or Options[key]
-        if obj and obj.SetValue then
-            obj:SetValue(defaultValue)
-        end
-    end
     autoFarmEnabled = false
     antiAfkEnabled = false
     flyEnabled = false
     infinityJumpEnabled = false
     noclipEnabled = false
+    autoBuyChestEnabled = false
+    autoBuyItemEnabled = false
+    autoClaimGoldEnabled = false
     if farmTask then coroutine.close(farmTask); farmTask = nil end
+    if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
+    if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
+    if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
     if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
     workspace.Gravity = gravityNormal
     local c = player.Character
