@@ -50,5 +50,5 @@ local function createButton(text, pos, scriptData)
     end)
 end
 
-createButton("Загрузить Default", UDim2.new(0, 10, 0, 10), encrypted_default)
+createButton("Загрузить Default(old)", UDim2.new(0, 10, 0, 10), encrypted_default)
 createButton("Загрузить Linoria", UDim2.new(0, 10, 0, 60), encrypted_linoria)
