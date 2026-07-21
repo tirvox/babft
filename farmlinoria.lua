@@ -1,4 +1,4 @@
--- tirvoxhub – фикс автофарма + Autobuy + Auto Claim Gold (оптимизированный)
+-- tirvoxhub – v9: removed spinbot and experimental
 
 local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 
@@ -6,23 +6,16 @@ local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
 local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 
-local Window = Library:CreateWindow({
-    Title = 'tirvoxhub',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2
-})
-
--- ==================== ОСНОВНАЯ ЛОГИКА (из старого рабочего скрипта) ====================
-local player = game.Players.LocalPlayer
+-- ==================== СЕРВИСЫ ====================
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
 
 local gravityNormal = workspace.Gravity
-local farmMode = "TP"
 local destinations = {
     CFrame.new(-51.566, 65, 1369.09),
     CFrame.new(-51.566, 65, 2139.09),
@@ -37,42 +30,41 @@ local destinations = {
     CFrame.new(-55.907, -360.99, 9489.307),
 }
 
+-- ==================== ФЛАГИ ====================
 local autoFarmEnabled = false
 local antiAfkEnabled = false
 local flyEnabled = false
 local farmTask = nil
-
 local infinityJumpEnabled = false
 local noclipEnabled = false
-local jumpKeyPressed = false
-local jumpTimer = 0
-local JUMP_INTERVAL = 0.2
-
--- ==================== AUTOBUY (тихий) ====================
-local autoBuyChestEnabled = false
-local autoBuyItemEnabled = false
-local autoBuyChestTask = nil
-local autoBuyItemTask = nil
-local remoteBuy = nil
-
--- ==================== AUTO CLAIM GOLD (оптимизированный) ====================
-local autoClaimGoldEnabled = false
+local autoStopEnabled = false
+local clickTpEnabled = false
+local autoClaimGoldEnabled = true
 local claimGoldTask = nil
-local claimGoldInterval = 0.5  -- настраиваемый интервал (по умолчанию 0.5 с)
+local fullbrightEnabled = false
+local fpsBoostEnabled = false
+local playerEspEnabled = false
+local zoomEnabled = false
 
-local function startClaimGoldLoop()
-    local claimGoldRemote = workspace:FindFirstChild("ClaimRiverResultsGold")
-    if not claimGoldRemote then return end
+-- ==================== FLY ====================
+local flyBodyVelocity = nil
+local flyBodyGyro = nil
+local flyKeys = {W=false, A=false, S=false, D=false, Space=false, Q=false}
+local flySpeed = 50
 
-    while autoClaimGoldEnabled do
-        pcall(function()
-            claimGoldRemote:FireServer()
-        end)
-        task.wait(claimGoldInterval)
-    end
-end
+-- ==================== INFINITY JUMP ====================
+local jumpHeld = false
+local jumpTimer = 0
+local JUMP_INTERVAL = 0.1
 
--- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+-- ==================== CLICK TP ====================
+local clickTpHeld = false
+local mouse = player:GetMouse()
+
+-- ==================== ESP ====================
+local espObjects = {}
+
+-- ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
 local function getChar()
     local c = player.Character
     if not c then return nil, nil, nil end
@@ -81,65 +73,297 @@ local function getChar()
     return c, h, r
 end
 
-local function setGodMode(enabled)
+local function setGodMode()
     local c, h, r = getChar()
     if not h then return end
-    if enabled then
-        h.MaxHealth = math.huge
-        h.Health = math.huge
-        h.BreakJointsOnDeath = false
-        h:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-        h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-    else
-        h.MaxHealth = 100
-        h.BreakJointsOnDeath = true
+    h.MaxHealth = math.huge
+    h.Health = math.huge
+    h.BreakJointsOnDeath = false
+    h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    h:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+    h:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+    h:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+    h:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+    h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+end
+
+-- ==================== AUTO CLAIM GOLD ====================
+local claimGoldInterval = 0.5
+
+local function claimGold()
+    local claimRemote = workspace:FindFirstChild("ClaimRiverResultsGold")
+    if claimRemote then
+        pcall(function()
+            claimRemote:FireServer()
+        end)
     end
 end
 
-local function updateNoclip()
+local function startClaimGoldLoop()
+    while autoClaimGoldEnabled do
+        claimGold()
+        task.wait(claimGoldInterval)
+    end
+end
+
+-- ==================== NOCLIP ====================
+RunService.Stepped:Connect(function()
+    if noclipEnabled then
+        local c = player.Character
+        if c then
+            for _, part in ipairs(c:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+local function disableNoclip()
     local c = player.Character
-    if not c then return end
-    for _, part in ipairs(c:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = not noclipEnabled
+    if c then
+        for _, part in ipairs(c:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanCollide = true
+            end
         end
     end
 end
 
-local function handleInfinityJump(dt)
-    if not infinityJumpEnabled then return end
-    if flyEnabled then return end
-    local c, h, r = getChar()
-    if not h then return end
-    if jumpKeyPressed then
+-- ==================== ПОЛЁТ ====================
+local function setupFly()
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    if flyBodyVelocity then flyBodyVelocity:Destroy() end
+    flyBodyVelocity = Instance.new("BodyVelocity")
+    flyBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    flyBodyVelocity.Parent = root
+    if flyBodyGyro then flyBodyGyro:Destroy() end
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    flyBodyGyro.P = 100000
+    flyBodyGyro.CFrame = root.CFrame
+    flyBodyGyro.Parent = root
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then hum.PlatformStand = true end
+    workspace.Gravity = 0
+end
+
+local function teardownFly()
+    if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+    workspace.Gravity = gravityNormal
+end
+
+local function toggleFly()
+    flyEnabled = not flyEnabled
+    if flyEnabled then setupFly() else teardownFly() end
+end
+
+-- ==================== FULLBRIGHT ====================
+local originalLighting = {
+    Brightness = Lighting.Brightness, ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd, GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+}
+
+local function applyFullbright()
+    Lighting.Brightness = 2
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 100000
+    Lighting.GlobalShadows = false
+    Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+    Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+end
+
+local function removeFullbright()
+    Lighting.Brightness = originalLighting.Brightness
+    Lighting.ClockTime = originalLighting.ClockTime
+    Lighting.FogEnd = originalLighting.FogEnd
+    Lighting.GlobalShadows = originalLighting.GlobalShadows
+    Lighting.Ambient = originalLighting.Ambient
+    Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+end
+
+-- ==================== FPS BOOST ====================
+local function applyFpsBoost()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            obj.Material = Enum.Material.SmoothPlastic
+            obj.Reflectance = 0
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            obj.Transparency = 1
+        elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+            obj.Enabled = false
+        end
+    end
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    if workspace:FindFirstChildOfClass("Terrain") then
+        workspace.Terrain.WaterWaveSize = 0
+        workspace.Terrain.WaterWaveSpeed = 0
+        workspace.Terrain.WaterReflectance = 0
+        workspace.Terrain.Decoration = false
+    end
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("PostEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("DepthOfFieldEffect") then
+            v.Enabled = false
+        end
+    end
+end
+
+-- ==================== PLAYER ESP ====================
+local function createEsp(p)
+    if p == player then return end
+    local function setup(char)
+        if not char then return end
+        local hl = Instance.new("Highlight")
+        hl.Name = "tirvox_esp"
+        hl.FillColor = Color3.fromRGB(255, 0, 0)
+        hl.FillTransparency = 0.5
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.OutlineTransparency = 0
+        hl.Parent = char
+        espObjects[p] = hl
+    end
+    if p.Character then setup(p.Character) end
+    p.CharacterAdded:Connect(function(c) setup(c) end)
+end
+
+local function enableEsp()
+    for _, p in ipairs(Players:GetPlayers()) do createEsp(p) end
+    Players.PlayerAdded:Connect(createEsp)
+end
+
+local function disableEsp()
+    for p, hl in pairs(espObjects) do hl:Destroy() end
+    espObjects = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            local hl = p.Character:FindFirstChild("tirvox_esp")
+            if hl then hl:Destroy() end
+        end
+    end
+end
+
+-- ==================== ZOOM UNLOCK ====================
+local function enableZoom()
+    player.CameraMaxZoomDistance = 999999
+    player.CameraMinZoomDistance = 0.5
+end
+
+local function disableZoom()
+    player.CameraMaxZoomDistance = 128
+    player.CameraMinZoomDistance = 0.5
+end
+
+-- ==================== ВВОД ====================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if clickTpEnabled and clickTpHeld then
+            local c, h, r = getChar()
+            if r and mouse.Hit then
+                r.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+            end
+        end
+    end
+
+    if gameProcessed then return end
+    local key = input.KeyCode
+    
+    if Options.FlyKeybind and key == Options.FlyKeybind.Value then
+        Toggles.FlyToggle:SetValue(not Toggles.FlyToggle.Value); return
+    end
+    if Options.InfJumpKeybind and key == Options.InfJumpKeybind.Value then
+        Toggles.InfinityJumpToggle:SetValue(not Toggles.InfinityJumpToggle.Value); return
+    end
+    if Options.NoclipKeybind and key == Options.NoclipKeybind.Value then
+        Toggles.NoclipToggle:SetValue(not Toggles.NoclipToggle.Value); return
+    end
+    if Options.ClickTpKeybind and key == Options.ClickTpKeybind.Value then
+        clickTpHeld = true; return
+    end
+
+    if key == Enum.KeyCode.W then flyKeys.W = true
+    elseif key == Enum.KeyCode.A then flyKeys.A = true
+    elseif key == Enum.KeyCode.S then flyKeys.S = true
+    elseif key == Enum.KeyCode.D then flyKeys.D = true
+    elseif key == Enum.KeyCode.Space then
+        flyKeys.Space = true; jumpHeld = true
+        if infinityJumpEnabled and not flyEnabled then
+            local c, h, r = getChar()
+            if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end
+    elseif key == Enum.KeyCode.Q then flyKeys.Q = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    local key = input.KeyCode
+    if key == Enum.KeyCode.W then flyKeys.W = false
+    elseif key == Enum.KeyCode.A then flyKeys.A = false
+    elseif key == Enum.KeyCode.S then flyKeys.S = false
+    elseif key == Enum.KeyCode.D then flyKeys.D = false
+    elseif key == Enum.KeyCode.Space then flyKeys.Space = false; jumpHeld = false
+    elseif key == Enum.KeyCode.Q then flyKeys.Q = false end
+
+    if Options.ClickTpKeybind and key == Options.ClickTpKeybind.Value then
+        clickTpHeld = false
+    end
+end)
+
+-- ==================== HEARTBEAT ====================
+RunService.Heartbeat:Connect(function(dt)
+    setGodMode()
+    if infinityJumpEnabled and not flyEnabled and jumpHeld then
         jumpTimer = jumpTimer + dt
         if jumpTimer >= JUMP_INTERVAL then
             jumpTimer = 0
-            h.Jump = true
-            h:ChangeState(Enum.HumanoidStateType.Jumping)
+            local c, h, r = getChar()
+            if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
         end
     else
         jumpTimer = 0
     end
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Space then
-        jumpKeyPressed = true
+    if flyEnabled then
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root and flyBodyVelocity then
+                local move = Vector3.new(0, 0, 0)
+                local cam = workspace.CurrentCamera
+                local camCF = cam and cam.CFrame or root.CFrame
+                if flyKeys.W then move = move + camCF.LookVector end
+                if flyKeys.S then move = move - camCF.LookVector end
+                if flyKeys.A then move = move - camCF.RightVector end
+                if flyKeys.D then move = move + camCF.RightVector end
+                if flyKeys.Space then move = move + Vector3.new(0, 1, 0) end
+                if flyKeys.Q then move = move - Vector3.new(0, 1, 0) end
+                if move.Magnitude > 0 then
+                    move = move.Unit * flySpeed
+                    if flyBodyGyro then
+                        flyBodyGyro.CFrame = CFrame.new(root.Position, root.Position + camCF.LookVector)
+                    end
+                else
+                    if autoStopEnabled then root.AssemblyLinearVelocity = Vector3.zero end
+                end
+                flyBodyVelocity.Velocity = move
+            end
+        end
     end
-end)
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Space then
-        jumpKeyPressed = false
-    end
+    local c, h, r = getChar()
+    if r and r.Position.Y < -500 then r.CFrame = destinations[1] end
 end)
 
--- === ФАРМ ===
+-- ==================== ФАРМ ====================
 local function tpMode(cf)
     local c, h, r = getChar()
     if not r then return end
@@ -156,29 +380,17 @@ local function tpMode(cf)
     end
 end
 
-local function tweenMode(cf)
-    local c, h, r = getChar()
-    if not r then return end
-    local tweenInfo = TweenInfo.new(1.5, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-    local goal = {CFrame = cf}
-    local tween = TweenService:Create(r, tweenInfo, goal)
-    tween:Play()
-    tween.Completed:Wait()
-    task.wait(1)
-end
-
 local function farmLoop()
     workspace.Gravity = 0
-    local modeFunc = (farmMode == "TP") and tpMode or tweenMode
     while autoFarmEnabled do
         local c, h, r = getChar()
         if not r then task.wait(1) continue end
         for i, cf in ipairs(destinations) do
-            if not autoFarmEnabled then
-                workspace.Gravity = gravityNormal
-                return
+            if not autoFarmEnabled then workspace.Gravity = gravityNormal; return end
+            tpMode(cf)
+            if autoClaimGoldEnabled and i > 1 and i < #destinations then
+                claimGold()
             end
-            modeFunc(cf)
             local delay = Options.FarmDelay and Options.FarmDelay.Value or 0.1
             task.wait(delay)
         end
@@ -187,112 +399,38 @@ local function farmLoop()
     workspace.Gravity = gravityNormal
 end
 
--- === AUTOBUY ===
+-- ==================== AUTOBUY ====================
+local autoBuyChestEnabled = false
+local autoBuyItemEnabled = false
+local autoBuyChestTask = nil
+local autoBuyItemTask = nil
+local remoteBuy = nil
+
 local function buyItem(itemName, amount)
     if not remoteBuy then
         remoteBuy = workspace:FindFirstChild("ItemBoughtFromShop")
         if not remoteBuy then return false end
     end
-    local success, err = pcall(function()
-        remoteBuy:InvokeServer(itemName, amount)
-    end)
-    return success
+    return pcall(function() remoteBuy:InvokeServer(itemName, amount) end)
 end
 
 local function autoBuyChestLoop()
     while autoBuyChestEnabled do
-        local chest = Options.AutoBuyChest and Options.AutoBuyChest.Value or "Common Chest"
-        local amount = Options.ChestAmount and Options.ChestAmount.Value or 1
-        buyItem(chest, amount)
-        local interval = Options.ChestInterval and Options.ChestInterval.Value or 5
-        task.wait(interval)
+        buyItem(Options.AutoBuyChest and Options.AutoBuyChest.Value or "Common Chest",
+                Options.ChestAmount and tonumber(Options.ChestAmount.Value) or 1)
+        task.wait(Options.ChestInterval and Options.ChestInterval.Value or 5)
     end
 end
 
 local function autoBuyItemLoop()
     while autoBuyItemEnabled do
-        local item = Options.AutoBuyItem and Options.AutoBuyItem.Value or "WoodBlock"
-        local amount = Options.ItemAmount and Options.ItemAmount.Value or 1
-        buyItem(item, amount)
-        local interval = Options.ItemInterval and Options.ItemInterval.Value or 5
-        task.wait(interval)
+        buyItem(Options.AutoBuyItem and Options.AutoBuyItem.Value or "WoodBlock",
+                Options.ItemAmount and tonumber(Options.ItemAmount.Value) or 1)
+        task.wait(Options.ItemInterval and Options.ItemInterval.Value or 5)
     end
 end
 
--- === ПОЛЁТ ===
-local flyBodyVelocity = nil
-local flyKeys = {W=false, A=false, S=false, D=false, Space=false, Q=false}
-local flySpeed = 50
-
-local function toggleFly()
-    flyEnabled = not flyEnabled
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    if flyEnabled then
-        if flyBodyVelocity then flyBodyVelocity:Destroy() end
-        flyBodyVelocity = Instance.new("BodyVelocity")
-        flyBodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-        flyBodyVelocity.Velocity = Vector3.new(0,0,0)
-        flyBodyVelocity.Parent = root
-        local hum = char:FindFirstChild("Humanoid")
-        if hum then
-            hum.PlatformStand = true
-            hum.WalkSpeed = 0
-        end
-        workspace.Gravity = 0
-    else
-        if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
-        local hum = char:FindFirstChild("Humanoid")
-        if hum then
-            hum.PlatformStand = false
-            hum.WalkSpeed = 16
-        end
-        workspace.Gravity = gravityNormal
-    end
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    local key = input.KeyCode
-    if key == Enum.KeyCode.W then flyKeys.W = true
-    elseif key == Enum.KeyCode.A then flyKeys.A = true
-    elseif key == Enum.KeyCode.S then flyKeys.S = true
-    elseif key == Enum.KeyCode.D then flyKeys.D = true
-    elseif key == Enum.KeyCode.Space then flyKeys.Space = true
-    elseif key == Enum.KeyCode.Q then flyKeys.Q = true
-    end
-end)
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    local key = input.KeyCode
-    if key == Enum.KeyCode.W then flyKeys.W = false
-    elseif key == Enum.KeyCode.A then flyKeys.A = false
-    elseif key == Enum.KeyCode.S then flyKeys.S = false
-    elseif key == Enum.KeyCode.D then flyKeys.D = false
-    elseif key == Enum.KeyCode.Space then flyKeys.Space = false
-    elseif key == Enum.KeyCode.Q then flyKeys.Q = false end
-end)
-
-RunService.Heartbeat:Connect(function()
-    if not flyEnabled then return end
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root or not flyBodyVelocity then return end
-    local move = Vector3.new(0,0,0)
-    if flyKeys.W then move = move + root.CFrame.LookVector end
-    if flyKeys.S then move = move - root.CFrame.LookVector end
-    if flyKeys.A then move = move - root.CFrame.RightVector end
-    if flyKeys.D then move = move + root.CFrame.RightVector end
-    if flyKeys.Space then move = move + Vector3.new(0,1,0) end
-    if flyKeys.Q then move = move - Vector3.new(0,1,0) end
-    if move.Magnitude > 0 then move = move.Unit * flySpeed end
-    flyBodyVelocity.Velocity = move
-end)
-
--- Анти-AFK
+-- ==================== АНТИ-AFK ====================
 task.spawn(function()
     while true do
         task.wait(10)
@@ -303,47 +441,30 @@ task.spawn(function()
     end
 end)
 
--- Обработка респавна
+-- ==================== ОБРАБОТКА РЕСПАВНА ====================
 player.CharacterAdded:Connect(function(newChar)
-    currentCharacter = newChar
-    humanoid = newChar:WaitForChild("Humanoid")
-    rootPart = newChar:WaitForChild("HumanoidRootPart")
-    setGodMode(true)
+    local humanoid = newChar:WaitForChild("Humanoid")
+    setGodMode()
     if autoFarmEnabled then
         if farmTask then coroutine.close(farmTask); farmTask = nil end
         farmTask = coroutine.create(farmLoop)
         coroutine.resume(farmTask)
     end
+    if flyEnabled then flyBodyVelocity = nil; flyBodyGyro = nil; setupFly() end
     if autoClaimGoldEnabled then
         if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
         claimGoldTask = coroutine.create(startClaimGoldLoop)
         coroutine.resume(claimGoldTask)
     end
-    local spd = Options.Speed and Options.Speed.Value or 16
-    local jmp = Options.Jump and Options.Jump.Value or 50
-    if humanoid then
-        humanoid.WalkSpeed = spd
-        humanoid.JumpPower = jmp
-    end
-    updateNoclip()
-end)
-
-local lastTime = tick()
-RunService.Heartbeat:Connect(function()
-    local now = tick()
-    local dt = now - lastTime
-    lastTime = now
-
-    setGodMode(true)
-    handleInfinityJump(dt)
-
-    local c, h, r = getChar()
-    if r and r.Position.Y < -500 then
-        r.CFrame = destinations[1]
-    end
+    humanoid.WalkSpeed = Options.Speed and Options.Speed.Value or 16
+    humanoid.JumpPower = Options.Jump and Options.Jump.Value or 50
 end)
 
 -- ==================== ИНТЕРФЕЙС ====================
+local Window = Library:CreateWindow({
+    Title = 'tirvoxhub', Center = true, AutoShow = true, TabPadding = 8, MenuFadeTime = 0.2
+})
+
 local Tabs = {
     Farm = Window:AddTab('Farm'),
     Player = Window:AddTab('Player'),
@@ -352,19 +473,16 @@ local Tabs = {
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
 
--- ---- Farm ----
+-- ==================== FARM ====================
 local farmGroup = Tabs.Farm:AddLeftGroupbox('Farm Controls')
 
 farmGroup:AddToggle('FarmToggle', {
-    Text = 'Auto Farm',
-    Default = false,
-    Tooltip = 'Включить/выключить фарм по точкам',
+    Text = 'Auto Farm', Default = false, Tooltip = 'Toggle farming by points (TP mode)',
     Callback = function(val)
         autoFarmEnabled = val
         if autoFarmEnabled then
             if farmTask then coroutine.close(farmTask); farmTask = nil end
-            farmTask = coroutine.create(farmLoop)
-            coroutine.resume(farmTask)
+            farmTask = coroutine.create(farmLoop); coroutine.resume(farmTask)
         else
             if farmTask then coroutine.close(farmTask); farmTask = nil end
             workspace.Gravity = gravityNormal
@@ -372,45 +490,23 @@ farmGroup:AddToggle('FarmToggle', {
     end
 })
 
-farmGroup:AddDropdown('FarmMode', {
-    Text = 'Режим фарма',
-    Values = {'TP', 'Tween'},
-    Default = 1,
-    Tooltip = 'TP - телепорт, Tween - плавное перемещение',
-    Callback = function(val)
-        farmMode = val
-    end
-})
-
 farmGroup:AddSlider('FarmDelay', {
-    Text = 'Задержка между точками (с)',
-    Default = 0.1,
-    Min = 0,
-    Max = 5,
-    Rounding = 1,
-    Suffix = 'с',
-    Tooltip = 'Пауза после каждого телепорта'
+    Text = 'Delay between points (s)', Default = 0.1, Min = 0, Max = 5, Rounding = 1, Suffix = 's',
+    Tooltip = 'Pause after each teleport',
 })
 
 farmGroup:AddToggle('AntiAfkToggle', {
-    Text = 'Anti AFK',
-    Default = false,
-    Tooltip = 'Имитирует нажатие K каждые 10 с',
-    Callback = function(val)
-        antiAfkEnabled = val
-    end
+    Text = 'Anti AFK', Default = false, Tooltip = 'Simulates K key press every 10s',
+    Callback = function(val) antiAfkEnabled = val end
 })
 
 farmGroup:AddToggle('AutoClaimGoldToggle', {
-    Text = 'Auto Claim Gold (River)',
-    Default = false,
-    Tooltip = 'Постоянно собирать золото (интервал настраивается)',
+    Text = 'Auto Claim Gold', Default = true, Tooltip = 'Collect river gold (skip first & last point)',
     Callback = function(val)
         autoClaimGoldEnabled = val
         if val then
             if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
-            claimGoldTask = coroutine.create(startClaimGoldLoop)
-            coroutine.resume(claimGoldTask)
+            claimGoldTask = coroutine.create(startClaimGoldLoop); coroutine.resume(claimGoldTask)
         else
             if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
         end
@@ -418,134 +514,127 @@ farmGroup:AddToggle('AutoClaimGoldToggle', {
 })
 
 farmGroup:AddSlider('ClaimGoldInterval', {
-    Text = 'Интервал сбора золота (с)',
-    Default = 0.5,
-    Min = 0.1,
-    Max = 2,
-    Rounding = 2,
-    Suffix = 'с',
-    Tooltip = 'Чем больше, тем меньше нагрузка (0.1 – максимум)',
-    Callback = function(val)
-        claimGoldInterval = val
-    end
+    Text = 'Gold interval (s)', Default = 0.5, Min = 0.1, Max = 5, Rounding = 2, Suffix = 's',
+    Callback = function(val) claimGoldInterval = val end
 })
 
--- ---- Player ----
-local playerGroup = Tabs.Player:AddLeftGroupbox('Player Settings')
+-- ==================== PLAYER — Movement ====================
+local moveGroup = Tabs.Player:AddLeftGroupbox('Movement')
 
-playerGroup:AddSlider('Speed', {
-    Text = 'Speed',
-    Default = 16,
-    Min = 0,
-    Max = 200,
-    Rounding = 1,
-    Tooltip = 'Скорость персонажа',
-    Callback = function(val)
-        local c, h, r = getChar()
-        if h then h.WalkSpeed = val end
-    end
+moveGroup:AddSlider('Speed', {
+    Text = 'Walk Speed', Default = 16, Min = 0, Max = 1000, Rounding = 1,
+    Tooltip = 'Character walk speed',
+    Callback = function(val) local c, h, r = getChar(); if h then h.WalkSpeed = val end end
 })
 
-playerGroup:AddSlider('Jump', {
-    Text = 'Jump Power',
-    Default = 50,
-    Min = 0,
-    Max = 300,
-    Rounding = 1,
-    Tooltip = 'Сила обычного прыжка',
-    Callback = function(val)
-        local c, h, r = getChar()
-        if h then h.JumpPower = val end
-    end
+moveGroup:AddSlider('Jump', {
+    Text = 'Jump Power', Default = 50, Min = 0, Max = 500, Rounding = 1,
+    Tooltip = 'Jump force',
+    Callback = function(val) local c, h, r = getChar(); if h then h.JumpPower = val end end
 })
 
-playerGroup:AddSlider('Gravity', {
-    Text = 'Gravity',
-    Default = 196.2,
-    Min = -100,
-    Max = 500,
-    Rounding = 1,
-    Tooltip = 'Гравитация мира',
-    Callback = function(val)
-        workspace.Gravity = val
-        gravityNormal = val
-    end
+moveGroup:AddSlider('Gravity', {
+    Text = 'Gravity', Default = 196.2, Min = -100, Max = 500, Rounding = 1,
+    Tooltip = 'World gravity',
+    Callback = function(val) workspace.Gravity = val; gravityNormal = val end
 })
 
-playerGroup:AddToggle('FlyToggle', {
-    Text = 'Fly Mode',
-    Default = false,
-    Tooltip = 'Включить полёт (WASD, Space/Q)',
-    Callback = function(val)
-        if val ~= flyEnabled then
-            toggleFly()
-        end
-    end
+moveGroup:AddSlider('FlySpeed', {
+    Text = 'Fly Speed', Default = 50, Min = 10, Max = 1000, Rounding = 1, Suffix = ' s/s',
+    Tooltip = 'Speed in Fly mode',
+    Callback = function(val) flySpeed = val end
 })
 
-playerGroup:AddToggle('InfinityJumpToggle', {
-    Text = 'Infinity Jump',
-    Default = false,
-    Tooltip = 'Бесконечные прыжки при зажатом пробеле',
-    Callback = function(val)
-        infinityJumpEnabled = val
-    end
+moveGroup:AddToggle('AutoStopToggle', {
+    Text = 'Auto Stop', Default = false, Tooltip = 'Instant stop when no keys pressed (Fly)',
+    Callback = function(val) autoStopEnabled = val end
 })
 
-playerGroup:AddToggle('NoclipToggle', {
-    Text = 'Noclip',
-    Default = false,
-    Tooltip = 'Проходить сквозь стены',
-    Callback = function(val)
-        noclipEnabled = val
-        updateNoclip()
-    end
+local flyToggle = moveGroup:AddToggle('FlyToggle', {
+    Text = 'Fly Mode', Default = false, Tooltip = 'Flight (WASD + Space/Q, camera-relative)',
+    Callback = function(val) if val ~= flyEnabled then toggleFly() end end
+})
+flyToggle:AddKeyPicker('FlyKeybind', { Default = 'F', Text = 'Fly', SyncToggleState = true, Mode = 'Toggle' })
+
+local infJumpToggle = moveGroup:AddToggle('InfinityJumpToggle', {
+    Text = 'Infinity Jump', Default = false, Tooltip = 'Infinite jump while holding Space',
+    Callback = function(val) infinityJumpEnabled = val end
+})
+infJumpToggle:AddKeyPicker('InfJumpKeybind', { Default = 'G', Text = 'Inf Jump', SyncToggleState = true, Mode = 'Toggle' })
+
+local noclipToggle = moveGroup:AddToggle('NoclipToggle', {
+    Text = 'Noclip', Default = false, Tooltip = 'Through walls — walking and flying',
+    Callback = function(val) noclipEnabled = val; if not val then disableNoclip() end end
+})
+noclipToggle:AddKeyPicker('NoclipKeybind', { Default = 'H', Text = 'Noclip', SyncToggleState = true, Mode = 'Toggle' })
+
+local clickTpToggle = moveGroup:AddToggle('ClickTpToggle', {
+    Text = 'Click TP', Default = false, Tooltip = 'Hold key + click to teleport to mouse',
+    Callback = function(val) clickTpEnabled = val end
+})
+clickTpToggle:AddKeyPicker('ClickTpKeybind', { Default = 'V', Text = 'Click TP', SyncToggleState = false, Mode = 'Hold' })
+
+-- ==================== PLAYER — Visuals ====================
+local visGroup = Tabs.Player:AddRightGroupbox('Visuals')
+
+visGroup:AddToggle('FullbrightToggle', {
+    Text = 'Fullbright', Default = false, Tooltip = 'Max brightness everywhere',
+    Callback = function(val) fullbrightEnabled = val; if val then applyFullbright() else removeFullbright() end end
+})
+
+visGroup:AddToggle('FpsBoostToggle', {
+    Text = 'FPS Boost', Default = false, Tooltip = 'Lower graphics for more FPS',
+    Callback = function(val) fpsBoostEnabled = val; if val then applyFpsBoost() end end
+})
+
+visGroup:AddToggle('PlayerEspToggle', {
+    Text = 'Player ESP', Default = false, Tooltip = 'See other players through walls',
+    Callback = function(val) playerEspEnabled = val; if val then enableEsp() else disableEsp() end end
+})
+
+visGroup:AddToggle('ZoomToggle', {
+    Text = 'Zoom Unlock', Default = false, Tooltip = 'Remove camera distance limit',
+    Callback = function(val) zoomEnabled = val; if val then enableZoom() else disableZoom() end end
 })
 
 -- ==================== AUTOBUY ====================
 local chestGroup = Tabs.Autobuy:AddLeftGroupbox('Auto Chest Buyer')
+
 chestGroup:AddDropdown('AutoBuyChest', {
-    Text = 'Тип сундука',
+    Text = 'Chest type',
     Values = {'Common Chest', 'Uncommon Chest', 'Rare Chest', 'Epic Chest', 'Legendary Chest'},
     Default = 1,
 })
+
 chestGroup:AddInput('ChestAmount', {
-    Text = 'Количество за раз',
-    Default = '1',
-    Placeholder = '1',
-    Numeric = true,
+    Text = 'Amount per buy', Default = '1', Placeholder = '1', Numeric = true,
 })
-chestGroup:AddButton({ Text = 'Купить сейчас', Func = function()
-    local chest = Options.AutoBuyChest.Value
-    local amount = tonumber(Options.ChestAmount.Value) or 1
-    buyItem(chest, amount)
+
+chestGroup:AddButton({ Text = 'Buy now', Func = function()
+    buyItem(Options.AutoBuyChest.Value, tonumber(Options.ChestAmount.Value) or 1)
 end })
+
 chestGroup:AddToggle('AutoBuyChestEnabled', {
-    Text = 'Автопокупка сундуков',
-    Default = false,
+    Text = 'Auto buy chests', Default = false,
     Callback = function(val)
         autoBuyChestEnabled = val
         if val then
             if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
-            autoBuyChestTask = coroutine.create(autoBuyChestLoop)
-            coroutine.resume(autoBuyChestTask)
+            autoBuyChestTask = coroutine.create(autoBuyChestLoop); coroutine.resume(autoBuyChestTask)
         else
             if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
         end
     end
 })
+
 chestGroup:AddSlider('ChestInterval', {
-    Text = 'Интервал (сек)',
-    Default = 5,
-    Min = 1,
-    Max = 60,
-    Rounding = 1,
-    Suffix = 'с',
+    Text = 'Interval (s)', Default = 5, Min = 1, Max = 60, Rounding = 1, Suffix = 's',
 })
 
 local itemGroup = Tabs.Autobuy:AddRightGroupbox('Item Buyer')
+
 itemGroup:AddDropdown('AutoBuyItem', {
-    Text = 'Предмет',
+    Text = 'Item',
     Values = {
         'Sign', 'BoatMotor', 'Car Parts', 'Parachutes', 'Harpoon', 'Balloons', 'JetPacks',
         'Switch', 'Button', 'LightBulb', 'CameraDome', 'Locked Doors', 'Note',
@@ -558,56 +647,55 @@ itemGroup:AddDropdown('AutoBuyItem', {
     },
     Default = 1,
 })
+
 itemGroup:AddInput('ItemAmount', {
-    Text = 'Количество за раз',
-    Default = '1',
-    Placeholder = '1',
-    Numeric = true,
+    Text = 'Amount per buy', Default = '1', Placeholder = '1', Numeric = true,
 })
-itemGroup:AddButton({ Text = 'Купить сейчас', Func = function()
-    local item = Options.AutoBuyItem.Value
-    local amount = tonumber(Options.ItemAmount.Value) or 1
-    buyItem(item, amount)
+
+itemGroup:AddButton({ Text = 'Buy now', Func = function()
+    buyItem(Options.AutoBuyItem.Value, tonumber(Options.ItemAmount.Value) or 1)
 end })
+
 itemGroup:AddToggle('AutoBuyItemEnabled', {
-    Text = 'Автопокупка предметов',
-    Default = false,
+    Text = 'Auto buy items', Default = false,
     Callback = function(val)
         autoBuyItemEnabled = val
         if val then
             if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
-            autoBuyItemTask = coroutine.create(autoBuyItemLoop)
-            coroutine.resume(autoBuyItemTask)
+            autoBuyItemTask = coroutine.create(autoBuyItemLoop); coroutine.resume(autoBuyItemTask)
         else
             if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
         end
     end
 })
+
 itemGroup:AddSlider('ItemInterval', {
-    Text = 'Интервал (сек)',
-    Default = 5,
-    Min = 1,
-    Max = 60,
-    Rounding = 1,
-    Suffix = 'с',
+    Text = 'Interval (s)', Default = 5, Min = 1, Max = 60, Rounding = 1, Suffix = 's',
 })
 
--- ---- Misc ----
-local miscGroup = Tabs.Misc:AddLeftGroupbox('Misc')
-miscGroup:AddLabel('Credits: kiten, tirvox', true)
-miscGroup:AddLabel('Клавиша меню: End', true)
+-- ==================== MISC ====================
+local creditsGroup = Tabs.Misc:AddLeftGroupbox('Credits')
+creditsGroup:AddLabel('Credits: kiten, tirvox', true)
 
--- ---- UI Settings ----
-local uiGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
-uiGroup:AddButton({ Text = 'Unload (сброс)', Func = function() Library:Unload() end })
-uiGroup:AddLabel('Клавиша меню'):AddKeyPicker('MenuKeybind', { Default = 'End', NoUI = true, Text = 'Menu keybind' })
+local gamesGroup = Tabs.Misc:AddRightGroupbox('Games')
+gamesGroup:AddLabel('Works in this games:', true)
+gamesGroup:AddLabel('• Dingus', true)
+gamesGroup:AddLabel('• Build a Boat for Treasure', true)
+
+-- ==================== UI SETTINGS ====================
+local menuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
+
+menuGroup:AddButton({ Text = 'Unload (reset)', Func = function() Library:Unload() end })
+
+local menuKeyLabel = menuGroup:AddLabel('Menu key')
+menuKeyLabel:AddKeyPicker('MenuKeybind', { Default = 'End', NoUI = true, Text = 'Menu keybind' })
 
 Library.ToggleKeybind = Options.MenuKeybind
 
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind', 'FlyKeybind', 'InfJumpKeybind', 'NoclipKeybind', 'ClickTpKeybind' })
 ThemeManager:SetFolder('tirvoxhub')
 SaveManager:SetFolder('tirvoxhub/configs')
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
@@ -616,35 +704,26 @@ SaveManager:LoadAutoloadConfig()
 
 -- ==================== СБРОС ====================
 local function resetSettings()
-    autoFarmEnabled = false
-    antiAfkEnabled = false
-    flyEnabled = false
-    infinityJumpEnabled = false
-    noclipEnabled = false
-    autoBuyChestEnabled = false
-    autoBuyItemEnabled = false
-    autoClaimGoldEnabled = false
+    autoFarmEnabled = false; antiAfkEnabled = false; flyEnabled = false
+    infinityJumpEnabled = false; noclipEnabled = false; autoStopEnabled = false
+    clickTpEnabled = false; autoClaimGoldEnabled = false
+    fullbrightEnabled = false; fpsBoostEnabled = false; playerEspEnabled = false
+    zoomEnabled = false
+    autoBuyChestEnabled = false; autoBuyItemEnabled = false
+
     if farmTask then coroutine.close(farmTask); farmTask = nil end
     if autoBuyChestTask then coroutine.close(autoBuyChestTask); autoBuyChestTask = nil end
     if autoBuyItemTask then coroutine.close(autoBuyItemTask); autoBuyItemTask = nil end
     if claimGoldTask then coroutine.close(claimGoldTask); claimGoldTask = nil end
-    if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
+
+    teardownFly(); disableNoclip(); removeFullbright(); disableEsp(); disableZoom()
+
     workspace.Gravity = gravityNormal
     local c = player.Character
     if c then
-        for _, part in ipairs(c:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
         local h = c:FindFirstChild("Humanoid")
-        if h then
-            h.WalkSpeed = 16
-            h.JumpPower = 50
-        end
+        if h then h.WalkSpeed = 16; h.JumpPower = 50; h.PlatformStand = false end
     end
 end
 
-Library:OnUnload(function()
-    resetSettings()
-end)
+Library:OnUnload(function() resetSettings() end)
